@@ -830,6 +830,140 @@ body::after {
   margin-top: var(--space-md);
 }
 
+/* ── Legs (multi-selection) ────────────────────────────────── */
+.legs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.btn-add-leg {
+  padding: 4px 10px;
+  background: var(--accent-dim);
+  color: var(--accent-light);
+  border: 1px dashed var(--border-accent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-add-leg:hover {
+  background: var(--accent-glow);
+  border-style: solid;
+}
+
+.legs-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.leg-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  position: relative;
+}
+
+.leg-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.leg-card-title {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-light);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.leg-remove {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all var(--transition-fast);
+}
+
+.leg-remove:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-bg);
+}
+
+.leg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.leg-grid .full {
+  grid-column: 1 / -1;
+}
+
+.leg-grid .form-label {
+  font-size: 0.65rem;
+}
+
+.leg-grid .form-input,
+.leg-grid .form-select {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.leg-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+/* Table multi-leg display */
+.legs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.legs-list-item {
+  color: var(--text-primary);
+}
+
+.legs-list-item .leg-cat {
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  margin-left: 4px;
+}
+
+.legs-count-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  font-size: 0.62rem;
+  color: var(--accent-light);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
 /* ── Analysis Section ──────────────────────────────────────── */
 .analysis-grid {
   display: grid;

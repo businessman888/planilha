@@ -8,9 +8,9 @@
 const SUPABASE_URL = 'https://mkegokkldfslwlvlonky.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rZWdva2tsZGZzbHdsdmxvbmt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMTIxODEsImV4cCI6MjA4ODY4ODE4MX0.9TO_8if1iGRcj0G1wICD9RwiPRVc0cFigSxwh1FV1gA';
 
-let supabase;
+let sb;
 try {
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 } catch (e) {
   console.error('Supabase client init failed:', e);
 }
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Data Loading ───────────────────────────────────────────
 async function loadBets() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('bets')
       .select('*')
       .order('date', { ascending: false })
@@ -62,16 +62,37 @@ async function loadBets() {
       .order('sequence_step', { ascending: false });
 
     if (error) throw error;
-    allBets = (data || []).map(b => ({
-      ...b,
-      odd: Number(b.odd),
-      stake: Number(b.stake),
-      payout: Number(b.payout),
-      profit: Number(b.profit),
-      line: Number(b.line),
-      sequence_id: Number(b.sequence_id),
-      sequence_step: Number(b.sequence_step),
-    }));
+    allBets = (data || []).map(b => {
+      const rawLegs = Array.isArray(b.legs) && b.legs.length > 0
+        ? b.legs
+        : [{
+            player: b.player || null,
+            team: b.team || '',
+            opponent: b.opponent || '',
+            category: b.category || '',
+            line: b.line,
+            pick: b.pick || 'Over',
+          }];
+      const legs = rawLegs.map(l => ({
+        player: l.player || null,
+        team: l.team || '',
+        opponent: l.opponent || '',
+        category: l.category || '',
+        line: l.line != null ? Number(l.line) : null,
+        pick: l.pick || 'Over',
+      }));
+      return {
+        ...b,
+        odd: Number(b.odd),
+        stake: Number(b.stake),
+        payout: Number(b.payout),
+        profit: Number(b.profit),
+        line: b.line != null ? Number(b.line) : null,
+        sequence_id: Number(b.sequence_id),
+        sequence_step: Number(b.sequence_step),
+        legs,
+      };
+    });
     applyFilters();
     updateDashboard();
     updateAnalysis();
@@ -99,8 +120,8 @@ function applyFilters() {
   filteredBets = allBets.filter(bet => {
     if (dateFilter && bet.date !== dateFilter) return false;
     if (resultFilter && bet.result !== resultFilter) return false;
-    if (categoryFilter && bet.category !== categoryFilter) return false;
-    if (playerFilter && !(bet.player || '').toLowerCase().includes(playerFilter)) return false;
+    if (categoryFilter && !bet.legs.some(l => l.category === categoryFilter)) return false;
+    if (playerFilter && !bet.legs.some(l => (l.player || '').toLowerCase().includes(playerFilter))) return false;
     return true;
   });
 
@@ -158,16 +179,19 @@ function renderTable() {
     const resultClass = bet.result.toLowerCase();
     const profitClass = bet.profit > 0 ? 'money-positive' : bet.profit < 0 ? 'money-negative' : '';
     const payoutClass = bet.payout > 0 ? 'money-positive' : '';
+    const legsHtml = bet.legs.map(l => {
+      const subject = l.player || (l.category === 'Total Jogo' ? `${l.team} vs ${l.opponent}` : '—');
+      const matchTxt = l.team && l.opponent ? ` <span class="leg-cat">(${l.team} vs ${l.opponent})</span>` : '';
+      const lineTxt = l.line != null ? ` ${l.pick} ${l.line}` : ` ${l.pick}`;
+      return `<div class="legs-list-item"><strong>${escapeHtml(subject)}</strong> — ${escapeHtml(l.category)}${lineTxt}${matchTxt}</div>`;
+    }).join('');
+    const countBadge = bet.legs.length > 1 ? `<span class="legs-count-badge">${bet.legs.length}x</span>` : '';
 
     return `
       <tr class="result-${resultClass}">
         <td>${formatDate(bet.date)}</td>
         <td><span class="seq-badge">S${bet.sequence_id}#${bet.sequence_step}</span></td>
-        <td>${bet.player || '—'}</td>
-        <td>${bet.team} vs ${bet.opponent}</td>
-        <td>${bet.category}</td>
-        <td>${bet.pick} ${bet.line}</td>
-        <td>${bet.pick}</td>
+        <td><div class="legs-list">${legsHtml}</div>${countBadge}</td>
         <td>${Number(bet.odd).toFixed(2)}</td>
         <td>${formatMoney(bet.stake)}</td>
         <td>
@@ -186,6 +210,12 @@ function renderTable() {
       </tr>
     `;
   }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
 
 // ── Result Cycle (quick edit) ──────────────────────────────
@@ -210,7 +240,7 @@ async function cycleResult(id, current) {
   }
 
   try {
-    const { error } = await supabase
+    const { error } = await sb
       .from('bets')
       .update({ result: next, payout, profit })
       .eq('id', id);
@@ -357,9 +387,12 @@ function buildWeekdayProfit() {
 function buildCategoryWinRate() {
   const cats = {};
   allBets.filter(b => b.result === 'GREEN' || b.result === 'RED').forEach(bet => {
-    if (!cats[bet.category]) cats[bet.category] = { greens: 0, total: 0 };
-    cats[bet.category].total++;
-    if (bet.result === 'GREEN') cats[bet.category].greens++;
+    bet.legs.forEach(l => {
+      const cat = l.category || '—';
+      if (!cats[cat]) cats[cat] = { greens: 0, total: 0 };
+      cats[cat].total++;
+      if (bet.result === 'GREEN') cats[cat].greens++;
+    });
   });
 
   const labels = Object.keys(cats);
@@ -379,12 +412,18 @@ function updateAnalysis() {
 
 function updatePlayerRanking() {
   const players = {};
-  allBets.filter(b => b.player && (b.result === 'GREEN' || b.result === 'RED')).forEach(bet => {
-    if (!players[bet.player]) players[bet.player] = { greens: 0, total: 0, profit: 0, invested: 0 };
-    players[bet.player].total++;
-    players[bet.player].invested += Number(bet.stake);
-    players[bet.player].profit += Number(bet.profit);
-    if (bet.result === 'GREEN') players[bet.player].greens++;
+  allBets.filter(b => b.result === 'GREEN' || b.result === 'RED').forEach(bet => {
+    const legs = bet.legs.filter(l => l.player);
+    if (legs.length === 0) return;
+    const stakeShare = Number(bet.stake) / legs.length;
+    const profitShare = Number(bet.profit) / legs.length;
+    legs.forEach(l => {
+      if (!players[l.player]) players[l.player] = { greens: 0, total: 0, profit: 0, invested: 0 };
+      players[l.player].total++;
+      players[l.player].invested += stakeShare;
+      players[l.player].profit += profitShare;
+      if (bet.result === 'GREEN') players[l.player].greens++;
+    });
   });
 
   const sorted = Object.entries(players)
@@ -416,11 +455,18 @@ function updatePlayerRanking() {
 function updateCategoryTable() {
   const cats = {};
   allBets.filter(b => b.result === 'GREEN' || b.result === 'RED').forEach(bet => {
-    if (!cats[bet.category]) cats[bet.category] = { greens: 0, total: 0, profit: 0, invested: 0 };
-    cats[bet.category].total++;
-    cats[bet.category].invested += Number(bet.stake);
-    cats[bet.category].profit += Number(bet.profit);
-    if (bet.result === 'GREEN') cats[bet.category].greens++;
+    const legs = bet.legs;
+    if (legs.length === 0) return;
+    const stakeShare = Number(bet.stake) / legs.length;
+    const profitShare = Number(bet.profit) / legs.length;
+    legs.forEach(l => {
+      const cat = l.category || '—';
+      if (!cats[cat]) cats[cat] = { greens: 0, total: 0, profit: 0, invested: 0 };
+      cats[cat].total++;
+      cats[cat].invested += stakeShare;
+      cats[cat].profit += profitShare;
+      if (bet.result === 'GREEN') cats[cat].greens++;
+    });
   });
 
   const sorted = Object.entries(cats)
@@ -462,12 +508,15 @@ function updateInsights() {
     return;
   }
 
-  // Best category
+  // Best category (aggregate across legs)
   const cats = {};
   resolved.forEach(b => {
-    if (!cats[b.category]) cats[b.category] = { g: 0, t: 0 };
-    cats[b.category].t++;
-    if (b.result === 'GREEN') cats[b.category].g++;
+    b.legs.forEach(l => {
+      const c = l.category || '—';
+      if (!cats[c]) cats[c] = { g: 0, t: 0 };
+      cats[c].t++;
+      if (b.result === 'GREEN') cats[c].g++;
+    });
   });
   const bestCat = Object.entries(cats).sort((a, b) => (b[1].g / b[1].t) - (a[1].g / a[1].t))[0];
   if (bestCat && bestCat[1].t >= 2) {
@@ -490,12 +539,15 @@ function updateInsights() {
     });
   }
 
-  // Best player
+  // Best player (aggregate across legs)
   const players = {};
-  resolved.filter(b => b.player).forEach(b => {
-    if (!players[b.player]) players[b.player] = { g: 0, t: 0 };
-    players[b.player].t++;
-    if (b.result === 'GREEN') players[b.player].g++;
+  resolved.forEach(b => {
+    b.legs.forEach(l => {
+      if (!l.player) return;
+      if (!players[l.player]) players[l.player] = { g: 0, t: 0 };
+      players[l.player].t++;
+      if (b.result === 'GREEN') players[l.player].g++;
+    });
   });
   const bestPlayer = Object.entries(players).filter(p => p[1].t >= 2).sort((a, b) => (b[1].g / b[1].t) - (a[1].g / a[1].t))[0];
   if (bestPlayer) {
@@ -548,11 +600,16 @@ function updateAnalysisCharts() {
   const rCounts = rlabels.map(k => ranges[k].t);
   renderOddRangeChart(rlabels, rWinRates, rCounts);
 
-  // Player profit chart
+  // Player profit chart (sum profit share per leg player)
   const players = {};
-  allBets.filter(b => b.player && b.result !== 'PENDING').forEach(bet => {
-    if (!players[bet.player]) players[bet.player] = 0;
-    players[bet.player] += Number(bet.profit);
+  allBets.filter(b => b.result !== 'PENDING').forEach(bet => {
+    const playerLegs = bet.legs.filter(l => l.player);
+    if (playerLegs.length === 0) return;
+    const share = Number(bet.profit) / playerLegs.length;
+    playerLegs.forEach(l => {
+      if (!players[l.player]) players[l.player] = 0;
+      players[l.player] += share;
+    });
   });
 
   const sorted = Object.entries(players).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -573,25 +630,21 @@ function openModal(betId) {
     document.getElementById('formSubmitBtn').textContent = '💾 Atualizar';
     document.getElementById('editBetId').value = bet.id;
     document.getElementById('formDate').value = bet.date;
-    document.getElementById('formCategory').value = bet.category;
-    document.getElementById('formPlayer').value = bet.player || '';
-    document.getElementById('formTeam').value = bet.team;
-    document.getElementById('formOpponent').value = bet.opponent;
-    document.getElementById('formLine').value = bet.line;
-    document.getElementById('formPick').value = bet.pick;
     document.getElementById('formOdd').value = bet.odd;
     document.getElementById('formStake').value = bet.stake;
     document.getElementById('formResult').value = bet.result;
     document.getElementById('formNotes').value = bet.notes || '';
-    togglePlayerField();
+    renderLegs(bet.legs.map(l => ({ ...l })));
     calcFormPayout();
   } else {
     document.getElementById('modalTitle').textContent = 'Nova Aposta';
     document.getElementById('formSubmitBtn').textContent = '💾 Salvar Aposta';
     document.getElementById('betForm').reset();
+    document.getElementById('editBetId').value = '';
+    document.getElementById('formResult').value = 'PENDING';
     setDefaultDate();
+    renderLegs([createEmptyLeg()]);
     suggestNextStake();
-    togglePlayerField();
     calcFormPayout();
   }
 
@@ -613,18 +666,150 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
 
-function togglePlayerField() {
-  const cat = document.getElementById('formCategory').value;
-  const group = document.getElementById('playerGroup');
-  const input = document.getElementById('formPlayer');
-  if (cat === 'Total Jogo') {
-    group.style.opacity = '0.4';
-    input.required = false;
-    input.value = '';
-  } else {
-    group.style.opacity = '1';
-    input.required = true;
+// ── Legs (form state lives in DOM) ─────────────────────────
+function createEmptyLeg() {
+  return { player: '', team: '', opponent: '', category: '', line: '', pick: 'Over' };
+}
+
+function renderLegs(legs) {
+  const container = document.getElementById('legsContainer');
+  container.innerHTML = '';
+  legs.forEach(leg => container.appendChild(buildLegCard(leg)));
+  updateLegTitles();
+}
+
+function buildLegCard(leg) {
+  const card = document.createElement('div');
+  card.className = 'leg-card';
+  card.innerHTML = `
+    <div class="leg-card-header">
+      <div class="leg-card-title">Seleção</div>
+      <button type="button" class="leg-remove" title="Remover">✕</button>
+    </div>
+    <div class="leg-grid">
+      <div class="form-group">
+        <label class="form-label">Categoria</label>
+        <select class="form-select leg-category">
+          <option value="">Selecione...</option>
+          <option value="Pontos Jogador">Pontos Jogador</option>
+          <option value="Assistências">Assistências</option>
+          <option value="Rebotes">Rebotes</option>
+          <option value="3pts">3pts</option>
+          <option value="Total Jogo">Total Jogo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jogador</label>
+        <input type="text" class="form-input leg-player" placeholder="Ex: LeBron James" list="playerSuggestions">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Time</label>
+        <input type="text" class="form-input leg-team" placeholder="Ex: Lakers" list="teamSuggestions">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Adversário</label>
+        <input type="text" class="form-input leg-opponent" placeholder="Ex: Celtics" list="teamSuggestions">
+      </div>
+      <div class="leg-row full">
+        <div class="form-group">
+          <label class="form-label">Pick</label>
+          <select class="form-select leg-pick">
+            <option value="Over">Over</option>
+            <option value="Under">Under</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Linha</label>
+          <input type="number" class="form-input leg-line" placeholder="22.5" step="0.5">
+        </div>
+        <div class="form-group">
+          <label class="form-label">&nbsp;</label>
+          <div class="form-hint">opcional p/ 3pts</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  card.querySelector('.leg-category').value = leg.category || '';
+  card.querySelector('.leg-player').value = leg.player || '';
+  card.querySelector('.leg-team').value = leg.team || '';
+  card.querySelector('.leg-opponent').value = leg.opponent || '';
+  card.querySelector('.leg-pick').value = leg.pick || 'Over';
+  card.querySelector('.leg-line').value = leg.line != null && leg.line !== '' ? leg.line : '';
+
+  const catSel = card.querySelector('.leg-category');
+  const playerInput = card.querySelector('.leg-player');
+  const applyTotalJogo = () => {
+    if (catSel.value === 'Total Jogo') {
+      playerInput.disabled = true;
+      playerInput.value = '';
+    } else {
+      playerInput.disabled = false;
+    }
+  };
+  catSel.addEventListener('change', applyTotalJogo);
+  applyTotalJogo();
+
+  card.querySelector('.leg-remove').addEventListener('click', () => {
+    const container = document.getElementById('legsContainer');
+    if (container.children.length <= 1) {
+      showToast('A aposta precisa de pelo menos uma seleção', 'info');
+      return;
+    }
+    card.remove();
+    updateLegTitles();
+  });
+
+  return card;
+}
+
+function updateLegTitles() {
+  const cards = document.querySelectorAll('#legsContainer .leg-card');
+  cards.forEach((c, i) => {
+    c.querySelector('.leg-card-title').textContent = `Seleção ${i + 1}`;
+  });
+}
+
+function addLeg() {
+  const container = document.getElementById('legsContainer');
+  container.appendChild(buildLegCard(createEmptyLeg()));
+  updateLegTitles();
+}
+
+function collectLegsFromForm() {
+  const cards = document.querySelectorAll('#legsContainer .leg-card');
+  const legs = [];
+  for (const card of cards) {
+    const category = card.querySelector('.leg-category').value;
+    const player = card.querySelector('.leg-player').value.trim();
+    const team = card.querySelector('.leg-team').value.trim();
+    const opponent = card.querySelector('.leg-opponent').value.trim();
+    const pick = card.querySelector('.leg-pick').value;
+    const lineStr = card.querySelector('.leg-line').value;
+    const line = lineStr === '' ? null : Number(lineStr);
+    legs.push({
+      player: category === 'Total Jogo' ? null : (player || null),
+      team: team || null,
+      opponent: opponent || null,
+      category,
+      line,
+      pick,
+    });
   }
+  return legs;
+}
+
+function validateLegs(legs) {
+  if (legs.length === 0) return 'Adicione pelo menos uma seleção.';
+  for (let i = 0; i < legs.length; i++) {
+    const l = legs[i];
+    if (!l.category) return `Seleção ${i + 1}: escolha a categoria.`;
+    if (l.category !== 'Total Jogo' && !l.player) return `Seleção ${i + 1}: informe o jogador.`;
+    if (l.category !== '3pts' && (l.line == null || Number.isNaN(l.line))) {
+      return `Seleção ${i + 1}: informe a linha.`;
+    }
+  }
+  return null;
 }
 
 function calcFormPayout() {
@@ -681,7 +866,13 @@ async function handleSubmitBet(e) {
   const odd = parseFloat(document.getElementById('formOdd').value);
   const stake = parseFloat(document.getElementById('formStake').value);
   const result = document.getElementById('formResult').value;
-  const category = document.getElementById('formCategory').value;
+  const legs = collectLegsFromForm();
+
+  const validationError = validateLegs(legs);
+  if (validationError) {
+    showToast(validationError, 'error');
+    return;
+  }
 
   let payout = 0;
   let profit = 0;
@@ -694,37 +885,40 @@ async function handleSubmitBet(e) {
     payout = stake;
   }
 
-  // Determine sequence
-  let seq = await getNextSequence();
-
+  // Determine sequence (only for new bets)
+  const primary = legs[0];
   const betData = {
     date: document.getElementById('formDate').value,
-    category,
-    player: category === 'Total Jogo' ? null : document.getElementById('formPlayer').value,
-    team: document.getElementById('formTeam').value,
-    opponent: document.getElementById('formOpponent').value,
-    line: parseFloat(document.getElementById('formLine').value),
-    pick: document.getElementById('formPick').value,
+    // Flat columns mirror the first leg for legacy compatibility / filters
+    category: primary.category,
+    player: primary.player,
+    team: primary.team,
+    opponent: primary.opponent,
+    line: primary.line,
+    pick: primary.pick,
+    // Multi-leg canonical storage
+    legs,
     odd,
     stake,
     result,
     payout,
     profit,
     notes: document.getElementById('formNotes').value || null,
-    sequence_id: seq.sequence_id,
-    sequence_step: seq.sequence_step,
   };
 
   try {
     if (editingBetId) {
-      const { error } = await supabase
+      const { error } = await sb
         .from('bets')
         .update(betData)
         .eq('id', editingBetId);
       if (error) throw error;
       showToast('Aposta atualizada!', 'success');
     } else {
-      const { error } = await supabase
+      const seq = await getNextSequence();
+      betData.sequence_id = seq.sequence_id;
+      betData.sequence_step = seq.sequence_step;
+      const { error } = await sb
         .from('bets')
         .insert(betData);
       if (error) throw error;
@@ -771,7 +965,7 @@ async function deleteBet(id) {
   if (!confirm('Tem certeza que deseja excluir esta aposta?')) return;
 
   try {
-    const { error } = await supabase
+    const { error } = await sb
       .from('bets')
       .delete()
       .eq('id', id);
@@ -786,19 +980,24 @@ async function deleteBet(id) {
 
 // ── Suggestions ────────────────────────────────────────────
 function populateSuggestions() {
-  const players = [...new Set(allBets.filter(b => b.player).map(b => b.player))];
-  const teams = [...new Set([
-    ...allBets.map(b => b.team),
-    ...allBets.map(b => b.opponent),
-  ])];
+  const players = new Set();
+  const teams = new Set();
+  allBets.forEach(bet => {
+    bet.legs.forEach(l => {
+      if (l.player) players.add(l.player);
+      if (l.team) teams.add(l.team);
+      if (l.opponent) teams.add(l.opponent);
+    });
+  });
 
   const playerList = document.getElementById('playerSuggestions');
-  playerList.innerHTML = players.map(p => `<option value="${p}">`).join('');
-
-  ['teamSuggestions', 'teamSuggestions2'].forEach(id => {
-    const list = document.getElementById(id);
-    list.innerHTML = teams.map(t => `<option value="${t}">`).join('');
-  });
+  if (playerList) {
+    playerList.innerHTML = [...players].map(p => `<option value="${escapeHtml(p)}">`).join('');
+  }
+  const teamList = document.getElementById('teamSuggestions');
+  if (teamList) {
+    teamList.innerHTML = [...teams].map(t => `<option value="${escapeHtml(t)}">`).join('');
+  }
 }
 
 // ── Projection ─────────────────────────────────────────────
