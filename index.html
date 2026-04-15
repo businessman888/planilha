@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Basketball Leverage Tracker — Sistema de planilha para documentação e análise de apostas de basquete com estratégia de alavancagem">
+  <title>🏀 Basketball Leverage Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ═══ Header ═══ -->
+    <header class="header">
+      <div class="header-brand">
+        <span class="header-logo">🏀</span>
+        <div>
+          <h1 class="header-title">Leverage Tracker</h1>
+          <p class="header-subtitle">NBA • Odds 1.40–1.59 • All-Win Strategy</p>
+        </div>
+      </div>
+      <div class="header-stats">
+        <div class="header-stat">
+          <div class="header-stat-value" id="headerProfit">R$ 0,00</div>
+          <div class="header-stat-label">Profit Total</div>
+        </div>
+        <div class="header-stat">
+          <div class="header-stat-value" id="headerWinRate">0%</div>
+          <div class="header-stat-label">Win Rate</div>
+        </div>
+        <div class="header-stat">
+          <div class="header-stat-value" id="headerStreak">0</div>
+          <div class="header-stat-label">Streak Atual</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══ Tabs ═══ -->
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true" id="tab-dashboard" onclick="switchTab('dashboard', this)">
+        <span class="tab-icon">📊</span> Dashboard
+      </button>
+      <button class="tab-btn" data-tab="planilha" role="tab" aria-selected="false" id="tab-planilha" onclick="switchTab('planilha', this)">
+        <span class="tab-icon">📝</span> Planilha
+      </button>
+      <button class="tab-btn" data-tab="analysis" role="tab" aria-selected="false" id="tab-analysis" onclick="switchTab('analysis', this)">
+        <span class="tab-icon">🔬</span> Análise
+      </button>
+      <button class="tab-btn" data-tab="projection" role="tab" aria-selected="false" id="tab-projection" onclick="switchTab('projection', this)">
+        <span class="tab-icon">🚀</span> Projeção
+      </button>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- TAB 1: DASHBOARD                                       -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section class="tab-content active" id="content-dashboard">
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">💰</div>
+          <div class="kpi-value" id="kpiInvested">R$ 0,00</div>
+          <div class="kpi-label">Total Investido</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">💎</div>
+          <div class="kpi-value" id="kpiReturned">R$ 0,00</div>
+          <div class="kpi-label">Total Retornado</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">📈</div>
+          <div class="kpi-value" id="kpiProfit">R$ 0,00</div>
+          <div class="kpi-label">Profit Líquido</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">🎯</div>
+          <div class="kpi-value" id="kpiROI">0%</div>
+          <div class="kpi-label">ROI</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">✅</div>
+          <div class="kpi-value" id="kpiWinRate">0%</div>
+          <div class="kpi-label">Win Rate</div>
+          <div class="kpi-sub" id="kpiWinRateSub">0/0 apostas</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">🔥</div>
+          <div class="kpi-value" id="kpiMaxStreak">0</div>
+          <div class="kpi-label">Maior Sequência</div>
+          <div class="kpi-sub" id="kpiMaxStreakSub">greens consecutivos</div>
+        </div>
+        <div class="kpi-card animate-in">
+          <div class="kpi-icon">⚡</div>
+          <div class="kpi-value" id="kpiCurrentStreak">0</div>
+          <div class="kpi-label">Streak Atual</div>
+          <div class="kpi-sub" id="kpiCurrentStreakSub">em andamento</div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">📈 Profit Acumulado</div>
+          <div class="chart-wrapper">
+            <canvas id="chartProfit"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🎯 Distribuição de Resultados</div>
+          <div class="chart-wrapper">
+            <canvas id="chartResults"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title">📅 Profit por Dia da Semana</div>
+          <div class="chart-wrapper">
+            <canvas id="chartWeekday"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🏷️ Win Rate por Categoria</div>
+          <div class="chart-wrapper">
+            <canvas id="chartCategory"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- TAB 2: PLANILHA                                        -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section class="tab-content" id="content-planilha">
+      <div class="planilha-header">
+        <div class="planilha-filters">
+          <input type="date" class="filter-input" id="filterDate" placeholder="Data">
+          <select class="filter-select" id="filterResult">
+            <option value="">Todos os Resultados</option>
+            <option value="GREEN">🟢 GREEN</option>
+            <option value="RED">🔴 RED</option>
+            <option value="VOID">⚪ VOID</option>
+            <option value="PENDING">🔵 PENDING</option>
+          </select>
+          <select class="filter-select" id="filterCategory">
+            <option value="">Todas as Categorias</option>
+            <option value="Pontos Jogador">Pontos Jogador</option>
+            <option value="Assistências">Assistências</option>
+            <option value="Rebotes">Rebotes</option>
+            <option value="3pts">3pts</option>
+            <option value="Total Jogo">Total Jogo</option>
+          </select>
+          <input type="text" class="filter-input" id="filterPlayer" placeholder="Buscar jogador...">
+        </div>
+        <button class="btn-primary" id="btnNewBet" onclick="openModal()">
+          <span>＋</span> Nova Aposta
+        </button>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table" id="betsTable">
+          <thead>
+            <tr>
+              <th data-sort="date">Data <span class="sort-icon">▼</span></th>
+              <th data-sort="sequence_id">Seq <span class="sort-icon">▼</span></th>
+              <th data-sort="player">Jogador <span class="sort-icon">▼</span></th>
+              <th>Jogo</th>
+              <th data-sort="category">Categoria <span class="sort-icon">▼</span></th>
+              <th>Linha</th>
+              <th>Pick</th>
+              <th data-sort="odd">Odd <span class="sort-icon">▼</span></th>
+              <th data-sort="stake">Stake <span class="sort-icon">▼</span></th>
+              <th data-sort="result">Resultado <span class="sort-icon">▼</span></th>
+              <th data-sort="payout">Payout <span class="sort-icon">▼</span></th>
+              <th data-sort="profit">Profit <span class="sort-icon">▼</span></th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="betsTableBody">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display: none;">
+          <div class="empty-state-icon">🏀</div>
+          <div class="empty-state-text">Nenhuma aposta registrada</div>
+          <div class="empty-state-sub">Clique em "Nova Aposta" para começar a documentar sua estratégia</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- TAB 3: ANÁLISE                                         -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section class="tab-content" id="content-analysis">
+      <div class="insights-grid" id="insightsGrid">
+        <!-- Dynamically populated insights -->
+      </div>
+
+      <div class="analysis-grid">
+        <div class="analysis-card">
+          <div class="analysis-title">🏆 Top Jogadores por ROI</div>
+          <table class="ranking-table" id="playerRankingTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Jogador</th>
+                <th>Apostas</th>
+                <th>Win Rate</th>
+                <th>ROI</th>
+                <th>Profit</th>
+              </tr>
+            </thead>
+            <tbody id="playerRankingBody"></tbody>
+          </table>
+        </div>
+
+        <div class="analysis-card">
+          <div class="analysis-title">📊 Performance por Categoria</div>
+          <table class="ranking-table" id="categoryTable">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Apostas</th>
+                <th>Win Rate</th>
+                <th>ROI</th>
+                <th>Profit</th>
+              </tr>
+            </thead>
+            <tbody id="categoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="analysis-grid">
+        <div class="analysis-card">
+          <div class="analysis-title">🎲 Performance por Faixa de Odd</div>
+          <div class="chart-wrapper">
+            <canvas id="chartOddRange"></canvas>
+          </div>
+        </div>
+        <div class="analysis-card">
+          <div class="analysis-title">🏅 Profit por Jogador</div>
+          <div class="chart-wrapper">
+            <canvas id="chartPlayerProfit"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- TAB 4: PROJEÇÃO                                        -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section class="tab-content" id="content-projection">
+      <div class="projection-layout">
+        <div class="projection-controls">
+          <h3>🎯 Calculadora de Projeção</h3>
+
+          <div class="form-group" style="margin-bottom: var(--space-lg);">
+            <label class="form-label">Valor Inicial (R$)</label>
+            <input type="number" class="form-input" id="projInitial" value="2.22" step="0.01" min="0.01" oninput="calculateProjection()">
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--space-lg);">
+            <div class="range-container">
+              <div class="range-header">
+                <label class="form-label">Odd Média</label>
+                <span class="range-value" id="projOddDisplay">1.40</span>
+              </div>
+              <input type="range" id="projOdd" min="1.40" max="1.59" step="0.01" value="1.40" oninput="calculateProjection()">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--space-xl);">
+            <label class="form-label">Valor Alvo (R$)</label>
+            <input type="number" class="form-input" id="projTarget" value="53000" step="100" min="1" oninput="calculateProjection()">
+          </div>
+
+          <div class="projection-result-card" id="projResultCard">
+            <div class="projection-big-number" id="projSteps">30</div>
+            <div class="projection-big-label">greens consecutivos necessários</div>
+            <div class="projection-formula" id="projFormula">
+              R$ 2,22 × 1.40³⁰ = R$ 53.000,00
+            </div>
+          </div>
+
+          <h3 style="font-size: 0.85rem;">📊 Cenários Comparativos</h3>
+          <div class="scenarios-grid" id="scenariosGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div class="projection-results">
+          <div class="projection-chart-card">
+            <div class="chart-title">📈 Curva de Crescimento Exponencial</div>
+            <div class="chart-wrapper" style="max-height:350px;">
+              <canvas id="chartProjection"></canvas>
+            </div>
+          </div>
+
+          <div class="projection-chart-card projection-steps-table">
+            <div class="chart-title">📋 Tabela de Progressão Step-by-Step</div>
+            <table class="ranking-table" id="projTable">
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Stake (R$)</th>
+                  <th>Odd</th>
+                  <th>Retorno (R$)</th>
+                  <th>Acumulado</th>
+                </tr>
+              </thead>
+              <tbody id="projTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══ Modal: Nova Aposta ═══ -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Nova Aposta</h2>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <form class="form-grid" id="betForm" onsubmit="return handleSubmitBet(event)">
+        <input type="hidden" id="editBetId">
+
+        <div class="form-group">
+          <label class="form-label">Data</label>
+          <input type="date" class="form-input" id="formDate" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Categoria</label>
+          <select class="form-select" id="formCategory" required onchange="togglePlayerField()">
+            <option value="">Selecione...</option>
+            <option value="Pontos Jogador">Pontos Jogador</option>
+            <option value="Assistências">Assistências</option>
+            <option value="Rebotes">Rebotes</option>
+            <option value="3pts">3pts</option>
+            <option value="Total Jogo">Total Jogo</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="playerGroup">
+          <label class="form-label">Jogador</label>
+          <input type="text" class="form-input" id="formPlayer" placeholder="Ex: LeBron James" list="playerSuggestions">
+          <datalist id="playerSuggestions"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Time</label>
+          <input type="text" class="form-input" id="formTeam" placeholder="Ex: Lakers" required list="teamSuggestions">
+          <datalist id="teamSuggestions"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Adversário</label>
+          <input type="text" class="form-input" id="formOpponent" placeholder="Ex: Celtics" required list="teamSuggestions2">
+          <datalist id="teamSuggestions2"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Linha</label>
+          <input type="number" class="form-input" id="formLine" placeholder="Ex: 22.5" step="0.5" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Pick</label>
+          <select class="form-select" id="formPick" required>
+            <option value="Over">Over</option>
+            <option value="Under">Under</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Odd</label>
+          <input type="number" class="form-input" id="formOdd" placeholder="1.40" step="0.01" min="1.01" max="5.00" required oninput="calcFormPayout()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Stake (R$)</label>
+          <input type="number" class="form-input" id="formStake" placeholder="0.00" step="0.01" min="0.01" required oninput="calcFormPayout()">
+          <div class="form-hint" id="stakeHint"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Resultado</label>
+          <select class="form-select" id="formResult" onchange="calcFormPayout()">
+            <option value="PENDING">🔵 PENDING</option>
+            <option value="GREEN">🟢 GREEN</option>
+            <option value="RED">🔴 RED</option>
+            <option value="VOID">⚪ VOID</option>
+          </select>
+        </div>
+
+        <div class="form-row-calc" id="formCalcRow">
+          <div class="calc-item">
+            <div class="calc-item-label">Payout Estimado</div>
+            <div class="calc-item-value" id="formPayoutDisplay">R$ 0,00</div>
+          </div>
+          <div class="calc-item">
+            <div class="calc-item-label">Profit</div>
+            <div class="calc-item-value" id="formProfitDisplay">R$ 0,00</div>
+          </div>
+        </div>
+
+        <div class="form-group full-width">
+          <label class="form-label">Notas (opcional)</label>
+          <textarea class="form-textarea" id="formNotes" placeholder="Observações sobre a aposta..."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+          <button type="submit" class="btn-primary" id="formSubmitBtn">💾 Salvar Aposta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Tab switching must be defined inline to be available immediately for onclick handlers -->
+  <script>
+    function switchTab(tabName, btn) {
+      document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.tab-content').forEach(function(c) {
+        c.classList.remove('active');
+      });
+      if (btn) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+      }
+      var content = document.getElementById('content-' + tabName);
+      if (content) content.classList.add('active');
+    }
+  </script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
